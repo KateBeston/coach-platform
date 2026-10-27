@@ -41,6 +41,7 @@ export default async function MessagesPage({ searchParams }: { searchParams: Pro
         sub="Booking emails and reminders sent for you, automatically."
         action={
           <div className="flex gap-2">
+            <Link href="/messages/templates" className="btn">Email wording</Link>
             <form action={sendTestEmailAction}><button className="btn-ghost">Send me a test</button></form>
             <Link href="/settings#emails" className="btn-ghost">Email settings</Link>
           </div>

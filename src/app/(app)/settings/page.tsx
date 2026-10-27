@@ -131,7 +131,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         <section id="emails" className="card grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <h2 className="section-title mb-1">Reminders and emails</h2>
-            <p className="text-sm text-muted">Sent automatically. Clients reply straight to you. <a href="/messages" className="text-accent underline">See what&apos;s been sent</a></p>
+            <p className="text-sm text-muted">Sent automatically. Clients reply straight to you. <a href="/messages/templates" className="text-accent underline">Change the wording</a> · <a href="/messages" className="text-accent underline">See what&apos;s been sent</a></p>
           </div>
           <label className="flex items-center gap-2 text-sm sm:col-span-2">
             <input type="checkbox" name="email_confirmations" defaultChecked={coach.email_confirmations} /> Email clients when a session is booked, moved or cancelled
