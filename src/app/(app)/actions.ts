@@ -660,3 +660,13 @@ export async function deleteExpenseAction(fd: FormData) {
   revalidatePath("/money", "layout");
   redirect("/money/expenses");
 }
+
+// ---------- Support access (platform staff) ----------
+
+export async function endSupportAction() {
+  const { supabase } = await getCoach();
+  await supabase.rpc("end_support_session");
+  revalidatePath("/", "layout");
+  const portal = process.env.NEXT_PUBLIC_PORTAL_URL;
+  redirect(portal ? `${portal}/coaches` : "/");
+}

@@ -1,12 +1,15 @@
 import { Nav } from "@/components/nav";
+import { SupportBanner } from "@/components/support-banner";
 import { getCoach } from "@/lib/coach";
 import { signOut } from "../login/actions";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const { coach, me, isManager, hasTeam } = await getCoach();
+  const { coach, me, isManager, hasTeam, support, staffEmail } = await getCoach();
   const name = coach.business_name || coach.display_name || "Your business";
 
   return (
+    <>
+    {support && <SupportBanner business={name} reason={support.reason} expiresAt={support.expires_at} staffEmail={staffEmail} />}
     <div className="min-h-screen md:flex">
       <aside className="print:hidden wash border-b border-line md:sticky md:top-0 md:h-screen md:w-56 md:shrink-0 md:border-r md:border-b-0">
         <div className="flex items-center justify-between px-4 py-4 md:block">
@@ -20,5 +23,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </aside>
       <main className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8 md:py-8">{children}</main>
     </div>
+    </>
   );
 }

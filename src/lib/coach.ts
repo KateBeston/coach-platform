@@ -45,6 +45,8 @@ export type Member = {
  * Signed-in person, their business and their team, once per request.
  * `coach` is the business; `me` is the signed-in team member.
  */
+export type SupportSession = { id: string; coach_id: string; reason: string; started_at: string; expires_at: string };
+
 export const getCoach = cache(async () => {
   const supabase = await createClient();
   const {
@@ -52,26 +54,38 @@ export const getCoach = cache(async () => {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: me } = await supabase.from("team_members").select("*").eq("user_id", user.id).eq("active", true).maybeSingle();
+  // Platform staff supporting a business see it exactly as its owner does.
+  const { data: supportRaw } = await supabase.rpc("my_support_session");
+  const support = (supportRaw ?? null) as SupportSession | null;
+
+  let me: Member | null = null;
+  if (support) {
+    const { data } = await supabase.from("team_members").select("*").eq("coach_id", support.coach_id).eq("role", "owner").order("created_at").limit(1).maybeSingle();
+    me = data as Member | null;
+  } else {
+    const { data } = await supabase.from("team_members").select("*").eq("user_id", user.id).eq("active", true).maybeSingle();
+    me = data as Member | null;
+  }
   if (!me) {
     await supabase.auth.signOut();
     redirect(`/login?error=${encodeURIComponent("This login isn't linked to an active account.")}`);
   }
   const [{ data: coach }, { data: team }] = await Promise.all([
     supabase.from("coaches").select("*").eq("id", me.coach_id).single(),
-    supabase.from("team_members").select("*").eq("active", true).order("created_at"),
+    supabase.from("team_members").select("*").eq("coach_id", me.coach_id).eq("active", true).order("created_at"),
   ]);
   if (!coach) redirect("/login");
 
-  const member = me as Member;
   const members = (team ?? []) as Member[];
   return {
     supabase,
     coach: coach as Coach,
-    me: member,
+    me,
     team: members,
-    isManager: member.role === "owner" || member.role === "manager",
+    isManager: me.role === "owner" || me.role === "manager",
     hasTeam: members.length > 1,
+    support,
+    staffEmail: support ? user.email ?? null : null,
   };
 });
 
