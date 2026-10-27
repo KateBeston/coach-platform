@@ -689,3 +689,24 @@ export async function sendTestEmailAction() {
   revalidatePath("/messages");
   redirect("/messages?test=1");
 }
+
+// ---------- Communications ----------
+
+export async function logCommunicationAction(fd: FormData) {
+  const { supabase, coach } = await getCoach();
+  const clientId = s(fd, "client_id");
+  const back = `/clients/${clientId}/communications`;
+  if (!s(fd, "subject") && !s(fd, "body")) fail(back, "Add a summary or the message.");
+  const when = s(fd, "occurred_at");
+  const { error } = await supabase.from("client_communications").insert({
+    client_id: clientId,
+    channel: s(fd, "channel") || "other",
+    direction: s(fd, "direction") === "inbound" ? "inbound" : "outbound",
+    subject: s(fd, "subject") || null,
+    body: s(fd, "body") || null,
+    occurred_at: when ? zonedToUtc(when, coach.timezone) : new Date().toISOString(),
+  });
+  if (error) fail(back, error.message);
+  revalidatePath(`/clients/${clientId}`, "layout");
+  redirect(`${back}?saved=1`);
+}

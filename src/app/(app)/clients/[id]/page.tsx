@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ClientFields } from "@/components/client-fields";
+import { CommList } from "@/components/comm-list";
+import { loadCommunications } from "@/lib/communications";
 import { Banner, Empty, Pill } from "@/components/ui";
 import { getCoach } from "@/lib/coach";
 import { WEEKDAYS, cadenceLabel, fmtDate, fmtDateTime, fmtRelativeDays, fullName, money, todayIn } from "@/lib/format";
@@ -45,6 +47,7 @@ export default async function ClientPage({
     supabase.from("offers").select("id, name, kind, session_minutes, session_count, price_cents").eq("active", true).order("name"),
   ]);
   if (!client) notFound();
+  const comms = await loadCommunications(supabase, id, 5);
 
   const activeArr = (arrangements.data ?? []).filter((a) => a.status !== "ended");
   const pastArr = (arrangements.data ?? []).filter((a) => a.status === "ended");
@@ -405,6 +408,15 @@ export default async function ClientPage({
             )}
           </section>
           )}
+
+          {/* Communications */}
+          <section className="card">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="section-title mb-0">Communications</h2>
+              <Link href={`/clients/${id}/communications`} className="text-sm text-accent">All · record one</Link>
+            </div>
+            <CommList rows={comms} tz={tz} />
+          </section>
 
           {/* Timeline */}
           <section className="card">
