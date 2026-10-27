@@ -610,3 +610,53 @@ export async function assignClientAction(fd: FormData) {
   revalidatePath(`/clients/${clientId}`);
   redirect(`/clients/${clientId}`);
 }
+
+// ---------- Expenses ----------
+
+export async function createExpenseAction(fd: FormData) {
+  const { supabase, coach, isManager } = await getCoach();
+  if (!isManager) redirect("/");
+  const back = "/money/expenses";
+  const amount = cents(fd, "amount");
+  if (!s(fd, "supplier") || !amount) fail(back, "Add who you paid and how much.");
+  const gst = coach.gst_registered ? Math.min(cents(fd, "gst"), amount) : 0;
+
+  let receipt_path: string | null = null;
+  const file = fd.get("receipt");
+  if (file instanceof File && file.size > 0) {
+    if (file.size > 10 * 1024 * 1024) fail(back, "That receipt is over 10 MB.");
+    const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
+    receipt_path = `${coach.id}/${crypto.randomUUID()}.${ext}`;
+    const { error: upErr } = await supabase.storage.from("receipts").upload(receipt_path, file, { contentType: file.type || undefined });
+    if (upErr) fail(back, `Receipt didn't upload: ${upErr.message}`);
+  }
+
+  const { error } = await supabase.from("expenses").insert({
+    spent_on: s(fd, "spent_on") || todayIn(coach.timezone),
+    supplier: s(fd, "supplier"),
+    description: s(fd, "description") || null,
+    category: s(fd, "category") || "other",
+    amount_cents: amount,
+    gst_cents: gst,
+    payment_method: s(fd, "payment_method") || null,
+    receipt_path,
+  });
+  if (error) {
+    if (receipt_path) await supabase.storage.from("receipts").remove([receipt_path]);
+    fail(back, error.message);
+  }
+  revalidatePath("/money", "layout");
+  redirect(`${back}?saved=1`);
+}
+
+export async function deleteExpenseAction(fd: FormData) {
+  const { supabase, isManager } = await getCoach();
+  if (!isManager) redirect("/");
+  const id = s(fd, "id");
+  const { data: e } = await supabase.from("expenses").select("receipt_path").eq("id", id).maybeSingle();
+  const { error } = await supabase.from("expenses").delete().eq("id", id);
+  if (error) fail("/money/expenses", error.message);
+  if (e?.receipt_path) await supabase.storage.from("receipts").remove([e.receipt_path]);
+  revalidatePath("/money", "layout");
+  redirect("/money/expenses");
+}
