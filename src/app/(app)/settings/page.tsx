@@ -12,10 +12,10 @@ const TIMEZONES = [
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ error?: string; saved?: string }> }) {
   const { error, saved } = await searchParams;
-  const { supabase, coach } = await getCoach();
+  const { supabase, coach, me, isManager, hasTeam } = await getCoach();
   const [{ data: rules }, { data: calendars }] = await Promise.all([
-    supabase.from("availability_rules").select("*").order("start_time"),
-    supabase.from("calendars").select("*").order("created_at"),
+    supabase.from("availability_rules").select("*").eq("member_id", me.id).order("start_time"),
+    supabase.from("calendars").select("*").eq("member_id", me.id).order("created_at"),
   ]);
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? "";
   const byDay = (d: number) => (rules ?? []).filter((r) => r.weekday === d);
@@ -25,6 +25,19 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       <PageHeader title="Settings" />
       <Banner error={error} message={saved ? "Saved." : undefined} />
 
+      {isManager && (
+        <section className="card mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="section-title mb-1">Team</h2>
+            <p className="text-sm text-muted">
+              {hasTeam ? "Manage who works in the business, their access and their pay." : "Working with other coaches or subcontractors? Add them so they get their own login, calendar and clients."}
+            </p>
+          </div>
+          <a href="/team" className="btn-ghost">{hasTeam ? "Open team" : "Add a team member"}</a>
+        </section>
+      )}
+
+      {isManager ? (
       <form action={updateSettingsAction} className="space-y-5">
         <section className="card grid gap-4 sm:grid-cols-2">
           <h2 className="section-title sm:col-span-2">Your business</h2>
@@ -114,9 +127,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
         <button className="btn">Save settings</button>
       </form>
+      ) : (
+        <p className="card text-sm text-muted">Business settings are managed by the owner. You can set your own working hours and calendars below.</p>
+      )}
 
       <form id="availability" action={updateAvailabilityAction} className="card mt-5 space-y-3">
-        <h2 className="section-title">Working hours</h2>
+        <h2 className="section-title">{hasTeam ? "Your working hours" : "Working hours"}</h2>
         <p className="text-sm text-muted">When clients can book you. Add a second block for split days.</p>
         {WEEKDAYS.map((day, d) => {
           const blocks = byDay(d);

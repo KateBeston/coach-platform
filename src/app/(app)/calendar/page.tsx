@@ -16,48 +16,59 @@ type Block = { id: string; title: string; sub?: string; href?: string; start: st
 export default async function CalendarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ week?: string; view?: string; error?: string }>;
+  searchParams: Promise<{ week?: string; view?: string; who?: string; error?: string }>;
 }) {
   const sp = await searchParams;
   const view = VIEWS.some((v) => v.key === sp.view) ? sp.view! : "all";
-  const { supabase, coach } = await getCoach();
+  const { supabase, coach, me, team, isManager, hasTeam } = await getCoach();
   const tz = coach.timezone;
+  // Whose diary: practitioners always see their own; managers can look at anyone or everyone.
+  const who = isManager && sp.who && (sp.who === "all" || team.some((m) => m.id === sp.who)) ? sp.who : me.id;
+  const memberById = new Map(team.map((m) => [m.id, m]));
   const today = todayIn(tz);
   const monday = weekStart(sp.week && /^\d{4}-\d{2}-\d{2}$/.test(sp.week) ? sp.week : today);
   const days = Array.from({ length: 7 }, (_, i) => addDays(monday, i));
   const from = zonedToUtc(`${monday}T00:00`, tz);
   const to = zonedToUtc(`${addDays(monday, 7)}T00:00`, tz);
-  const here = `/calendar?week=${monday}&view=${view}`;
+  const qs = (o: Record<string, string>) => new URLSearchParams({ week: monday, view, who, ...o }).toString();
+  const here = `/calendar?${qs({})}`;
 
   const [{ data: calendars }, { data: events }, { data: sessions }, { data: rules }] = await Promise.all([
-    supabase.from("calendars").select("*").order("created_at"),
+    who === "all"
+      ? supabase.from("calendars").select("*").order("created_at")
+      : supabase.from("calendars").select("*").or(`member_id.eq.${who},member_id.is.null`).order("created_at"),
     supabase.from("calendar_events").select("*").lt("starts_at", to).gt("ends_at", from).order("starts_at"),
-    supabase
-      .from("sessions")
-      .select("id, starts_at, ends_at, status, client:clients(first_name, last_name)")
-      .lt("starts_at", to)
-      .gt("ends_at", from)
-      .neq("status", "cancelled"),
-    supabase.from("availability_rules").select("weekday, start_time, end_time"),
+    (() => {
+      const q = supabase
+        .from("sessions")
+        .select("id, starts_at, ends_at, status, practitioner_id, client:clients(first_name, last_name)")
+        .lt("starts_at", to)
+        .gt("ends_at", from)
+        .neq("status", "cancelled");
+      return who === "all" ? q : q.eq("practitioner_id", who);
+    })(),
+    supabase.from("availability_rules").select("weekday, start_time, end_time").eq("member_id", who === "all" ? me.id : who),
   ]);
 
   const cals = calendars ?? [];
   const shown = new Set(cals.filter((c) => c.visible && (view === "all" || c.kind === view || (view === "work" && c.kind === "other"))).map((c) => c.id));
-  const bookingCal = cals.find((c) => c.is_booking_destination) ?? cals.find((c) => c.kind === "work");
+  const bookingCal =
+    cals.find((c) => c.is_booking_destination && (who === "all" || c.member_id === who)) ?? cals.find((c) => c.kind === "work");
   const calById = new Map(cals.map((c) => [c.id, c]));
 
   const blocks: Block[] = [];
-  if (bookingCal && shown.has(bookingCal.id)) {
+  if (bookingCal && (who === "all" || shown.has(bookingCal.id))) {
     for (const s of sessions ?? []) {
       const c = s.client as unknown as { first_name: string; last_name: string } | null;
+      const person = s.practitioner_id ? memberById.get(s.practitioner_id) : undefined;
       blocks.push({
         id: s.id,
         title: c ? fullName(c) : "Session",
-        sub: s.status === "scheduled" ? undefined : s.status.replace("_", " "),
+        sub: [who === "all" && person ? person.name.split(" ")[0] : "", s.status === "scheduled" ? "" : s.status.replace("_", " ")].filter(Boolean).join(" · ") || undefined,
         href: `/sessions/${s.id}`,
         start: s.starts_at,
         end: s.ends_at,
-        colour: bookingCal.colour,
+        colour: who === "all" && person ? person.colour : bookingCal.colour,
         muted: s.status !== "scheduled" && s.status !== "completed",
       });
     }
@@ -81,18 +92,31 @@ export default async function CalendarPage({
         sub={`Week of ${fmtDate(monday)}`}
         action={
           <div className="flex items-center gap-2">
-            <Link className="btn-ghost btn-sm" href={`/calendar?week=${addDays(monday, -7)}&view=${view}`}>Previous</Link>
-            <Link className="btn-ghost btn-sm" href={`/calendar?view=${view}`}>This week</Link>
-            <Link className="btn-ghost btn-sm" href={`/calendar?week=${addDays(monday, 7)}&view=${view}`}>Next</Link>
+            <Link className="btn-ghost btn-sm" href={`/calendar?${qs({ week: addDays(monday, -7) })}`}>Previous</Link>
+            <Link className="btn-ghost btn-sm" href={`/calendar?${qs({ week: weekStart(today) })}`}>This week</Link>
+            <Link className="btn-ghost btn-sm" href={`/calendar?${qs({ week: addDays(monday, 7) })}`}>Next</Link>
           </div>
         }
       />
       <Banner error={sp.error} />
 
+      {isManager && hasTeam && (
+        <div className="mb-3 flex flex-wrap gap-1.5">
+          {[{ id: me.id, name: "My diary" }, ...team.filter((m) => m.id !== me.id), { id: "all", name: "Everyone" }].map((m) => (
+            <Link
+              key={m.id}
+              href={`/calendar?${qs({ who: m.id })}`}
+              className={`rounded-full px-3 py-1 text-sm ${m.id === who ? "bg-accent text-white" : "bg-surface text-ink/80 ring-1 ring-line"}`}
+            >
+              {m.name}
+            </Link>
+          ))}
+        </div>
+      )}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="flex rounded-lg bg-surface p-0.5 ring-1 ring-line">
           {VIEWS.map((v) => (
-            <Link key={v.key} href={`/calendar?week=${monday}&view=${v.key}`} className={`rounded-md px-3 py-1 text-sm ${v.key === view ? "bg-accent text-white" : "text-ink/80"}`}>
+            <Link key={v.key} href={`/calendar?${qs({ view: v.key })}`} className={`rounded-md px-3 py-1 text-sm ${v.key === view ? "bg-accent text-white" : "text-ink/80"}`}>
               {v.label}
             </Link>
           ))}

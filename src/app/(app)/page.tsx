@@ -4,7 +4,8 @@ import { getCoach } from "@/lib/coach";
 import { cadenceLabel, fmtDateTime, fmtRelativeDays, fmtTime, fullName, money, todayIn, zonedToUtc, addDays } from "@/lib/format";
 
 export default async function TodayPage() {
-  const { supabase, coach } = await getCoach();
+  const { supabase, coach, me, isManager, hasTeam, team } = await getCoach();
+  const memberName = new Map(team.map((m) => [m.id, m.name]));
   const tz = coach.timezone;
 
   // Keep standing bookings topped up whenever the coach opens the app.
@@ -19,7 +20,7 @@ export default async function TodayPage() {
   const [todaySessions, overview, unpaid, paidThisMonth, leads, hoursYear, needsNotes] = await Promise.all([
     supabase
       .from("sessions")
-      .select("id, starts_at, ends_at, status, location_type, meeting_url, client:clients(id, first_name, last_name)")
+      .select("id, starts_at, ends_at, status, location_type, meeting_url, practitioner_id, client:clients(id, first_name, last_name)")
       .gte("starts_at", dayStart)
       .lt("starts_at", dayEnd)
       .neq("status", "cancelled")
@@ -32,7 +33,13 @@ export default async function TodayPage() {
       .order("due_date"),
     supabase.from("invoices").select("total_cents, tax_cents").eq("status", "paid").gte("paid_at", monthStart),
     supabase.from("clients").select("id, first_name, last_name, created_at, source").eq("status", "lead").order("created_at", { ascending: false }).limit(5),
-    supabase.from("sessions").select("starts_at, ends_at, is_paid_coaching").eq("status", "completed").eq("counts_toward_icf", true).gte("starts_at", yearStart),
+    supabase
+      .from("sessions")
+      .select("starts_at, ends_at, is_paid_coaching")
+      .eq("practitioner_id", me.id)
+      .eq("status", "completed")
+      .eq("counts_toward_icf", true)
+      .gte("starts_at", yearStart),
     supabase
       .from("sessions")
       .select("id, starts_at, client:clients(first_name, last_name)")
@@ -58,10 +65,11 @@ export default async function TodayPage() {
   return (
     <>
       <PageHeader
-        title={`${greeting}${coach.display_name ? `, ${coach.display_name.split(" ")[0]}` : ""}`}
+        title={`${greeting}${me.name ? `, ${me.name.split(" ")[0]}` : ""}`}
         sub={new Intl.DateTimeFormat("en-AU", { timeZone: tz, weekday: "long", day: "numeric", month: "long" }).format(new Date())}
       />
 
+      {isManager ? (
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Received this month" value={money(received, coach.currency)} href="/invoices?status=paid" />
         <Stat
@@ -72,6 +80,13 @@ export default async function TodayPage() {
         <Stat label="Owed to you" value={money(owed, coach.currency)} hint={overdue.length ? `${overdue.length} overdue` : undefined} href="/invoices?status=sent" />
         <Stat label="Coaching hours this year" value={hours.toFixed(1)} href="/hours" />
       </div>
+      ) : (
+        <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Stat label="Sessions today" value={String(todaySessions.data?.length ?? 0)} />
+          <Stat label="Need booking" value={String(needsBooking.length)} />
+          <Stat label="Your coaching hours this year" value={hours.toFixed(1)} href="/hours" />
+        </div>
+      )}
 
       <div className="grid gap-5 lg:grid-cols-3">
         <section className="card lg:col-span-2">
@@ -86,6 +101,7 @@ export default async function TodayPage() {
                       <p className="font-medium">{c ? fullName(c) : "Client"}</p>
                       <p className="text-sm text-muted">
                         {fmtTime(s.starts_at, tz)} – {fmtTime(s.ends_at, tz)} · {s.location_type.replace("_", " ")}
+                        {hasTeam && s.practitioner_id && ` · with ${memberName.get(s.practitioner_id) ?? ""}`}
                       </p>
                     </Link>
                     <div className="flex items-center gap-2">
@@ -109,7 +125,7 @@ export default async function TodayPage() {
             <ul className="space-y-3">
               {needsBooking.map((a) => (
                 <li key={a.id}>
-                  <Link href={`/clients/${a.client_id}`} className="block rounded-lg bg-warn-soft px-3 py-2">
+                  <Link href={`/clients/${a.client_id}`} className="block rounded-xl bg-warn-soft px-3 py-2">
                     <p className="font-medium">{fullName(a)}</p>
                     <p className="text-xs text-warn">
                       {cadenceLabel(a.cadence ?? "")} · last session {fmtRelativeDays(a.last_session_at)}
@@ -164,6 +180,7 @@ export default async function TodayPage() {
           )}
         </section>
 
+        {isManager && (
         <section className="card">
           <h2 className="section-title">Unpaid invoices</h2>
           {unpaid.data?.length ? (
@@ -187,6 +204,7 @@ export default async function TodayPage() {
             <Empty>Nothing outstanding.</Empty>
           )}
         </section>
+        )}
 
         <section className="card lg:col-span-3">
           <div className="mb-3 flex items-center justify-between">

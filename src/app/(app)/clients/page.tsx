@@ -5,11 +5,13 @@ import { cadenceLabel, fmtDateTime, fullName } from "@/lib/format";
 
 const FILTERS = ["all", "lead", "active", "paused", "alumni"];
 
-export default async function ClientsPage({ searchParams }: { searchParams: Promise<{ status?: string; q?: string }> }) {
-  const { status = "all", q = "" } = await searchParams;
-  const { supabase, coach } = await getCoach();
+export default async function ClientsPage({ searchParams }: { searchParams: Promise<{ status?: string; q?: string; who?: string }> }) {
+  const { status = "all", q = "", who = "" } = await searchParams;
+  const { supabase, coach, team, hasTeam, isManager } = await getCoach();
+  const memberName = new Map(team.map((m) => [m.id, m.name]));
 
-  let query = supabase.from("clients").select("id, first_name, last_name, email, status, source").order("first_name");
+  let query = supabase.from("clients").select("id, first_name, last_name, email, status, source, practitioner_id").order("first_name");
+  if (who) query = query.eq("practitioner_id", who);
   if (status !== "all") query = query.eq("status", status);
   if (q) query = query.or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%`);
 
@@ -27,14 +29,20 @@ export default async function ClientsPage({ searchParams }: { searchParams: Prom
         {FILTERS.map((f) => (
           <Link
             key={f}
-            href={`/clients?status=${f}`}
+            href={`/clients?status=${f}${who ? `&who=${who}` : ""}`}
             className={`rounded-full px-3 py-1 text-sm capitalize ${f === status ? "bg-accent text-white" : "bg-surface text-ink/80 ring-1 ring-line"}`}
           >
             {f}
           </Link>
         ))}
-        <form className="ml-auto">
+        <form className="ml-auto flex gap-2">
           <input type="hidden" name="status" value={status} />
+          {isManager && hasTeam && (
+            <select name="who" className="input w-44" defaultValue={who}>
+              <option value="">Everyone&apos;s clients</option>
+              {team.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+          )}
           <input className="input w-56" name="q" defaultValue={q} placeholder="Search name or email" />
         </form>
       </div>
@@ -42,9 +50,10 @@ export default async function ClientsPage({ searchParams }: { searchParams: Prom
       <div className="card p-0">
         {clients?.length ? (
           <table className="w-full text-sm">
-            <thead className="text-left text-xs tracking-wide text-muted uppercase">
+            <thead className="text-left text-sm text-muted">
               <tr className="border-b border-line">
                 <th className="px-5 py-3 font-medium">Name</th>
+                {hasTeam && <th className="hidden px-5 py-3 font-medium lg:table-cell">Practitioner</th>}
                 <th className="hidden px-5 py-3 font-medium sm:table-cell">Arrangement</th>
                 <th className="hidden px-5 py-3 font-medium md:table-cell">Next session</th>
                 <th className="px-5 py-3 font-medium">Status</th>
@@ -59,6 +68,7 @@ export default async function ClientsPage({ searchParams }: { searchParams: Prom
                       <Link href={`/clients/${c.id}`} className="font-medium hover:text-accent">{fullName(c)}</Link>
                       <p className="text-xs text-muted">{c.email}</p>
                     </td>
+                    {hasTeam && <td className="hidden px-5 py-3 lg:table-cell">{c.practitioner_id ? memberName.get(c.practitioner_id) : "–"}</td>}
                     <td className="hidden px-5 py-3 sm:table-cell">{a ? cadenceLabel(a.cadence ?? "") : <span className="text-muted">None</span>}</td>
                     <td className="hidden px-5 py-3 md:table-cell">
                       {a?.next_session_at ? fmtDateTime(a.next_session_at, coach.timezone) : a?.needs_booking ? <Pill status="overdue" label="Needs booking" /> : <span className="text-muted">–</span>}

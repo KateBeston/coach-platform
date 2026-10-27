@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { Banner, Empty, PageHeader } from "@/components/ui";
 import { getCoach } from "@/lib/coach";
 import { fmtDateTime, fullName } from "@/lib/format";
@@ -5,7 +6,8 @@ import { createInvoiceAction } from "../../actions";
 
 export default async function NewInvoicePage({ searchParams }: { searchParams: Promise<{ client?: string; error?: string }> }) {
   const { client: clientId, error } = await searchParams;
-  const { supabase, coach } = await getCoach();
+  const { supabase, coach, isManager } = await getCoach();
+  if (!isManager) redirect("/");
 
   const { data: clients } = await supabase.from("clients").select("id, first_name, last_name").neq("status", "alumni").order("first_name");
 

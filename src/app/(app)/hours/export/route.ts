@@ -1,10 +1,11 @@
 import { getCoach } from "@/lib/coach";
 
 export async function GET() {
-  const { supabase, coach } = await getCoach();
+  const { supabase, coach, me } = await getCoach();
   const { data } = await supabase
     .from("sessions")
     .select("starts_at, ends_at, is_paid_coaching, client:clients(first_name, last_name, email)")
+    .eq("practitioner_id", me.id)
     .eq("status", "completed")
     .eq("counts_toward_icf", true)
     .order("starts_at");

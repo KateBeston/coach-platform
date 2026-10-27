@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Empty, PageHeader, Pill, Stat } from "@/components/ui";
 import { getCoach } from "@/lib/coach";
@@ -7,7 +8,8 @@ const FILTERS = ["all", "draft", "sent", "paid", "void"];
 
 export default async function InvoicesPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
   const { status = "all" } = await searchParams;
-  const { supabase, coach } = await getCoach();
+  const { supabase, coach, isManager } = await getCoach();
+  if (!isManager) redirect("/");
   const today = todayIn(coach.timezone);
   const fyStartYear = Number(today.slice(5, 7)) >= 7 ? Number(today.slice(0, 4)) : Number(today.slice(0, 4)) - 1;
   const fyStart = `${fyStartYear}-07-01`;
@@ -47,7 +49,7 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
       <div className="card p-0">
         {invoices?.length ? (
           <table className="w-full text-sm">
-            <thead className="text-left text-xs tracking-wide text-muted uppercase">
+            <thead className="text-left text-sm text-muted">
               <tr className="border-b border-line">
                 <th className="px-5 py-3 font-medium">Invoice</th>
                 <th className="px-5 py-3 font-medium">Client</th>

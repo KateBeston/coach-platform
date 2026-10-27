@@ -7,6 +7,7 @@ import { WEEKDAYS, cadenceLabel, fmtDate, fmtDateTime, fmtRelativeDays, fullName
 import {
   addGoalAction,
   addNoteAction,
+  assignClientAction,
   bookSessionAction,
   createArrangementAction,
   setGoalStatusAction,
@@ -27,7 +28,7 @@ export default async function ClientPage({
 }) {
   const { id } = await params;
   const { error } = await searchParams;
-  const { supabase, coach } = await getCoach();
+  const { supabase, coach, team, isManager, hasTeam } = await getCoach();
   const tz = coach.timezone;
   const now = new Date().toISOString();
   const back = `/clients/${id}`;
@@ -62,6 +63,7 @@ export default async function ClientPage({
             {client.email && <a href={`mailto:${client.email}`} className="hover:text-ink">{client.email}</a>}
             {client.phone && <span>· {client.phone}</span>}
             <span>· last session {fmtRelativeDays(completed[0]?.starts_at ?? null)}</span>
+            {hasTeam && client.practitioner_id && <span>· with {team.find((m) => m.id === client.practitioner_id)?.name}</span>}
           </p>
         </div>
         <details className="group">
@@ -69,6 +71,7 @@ export default async function ClientPage({
           <form action={updateClientAction} className="card absolute right-4 z-10 mt-2 w-[min(36rem,calc(100vw-2rem))] space-y-4 shadow-lg md:right-8">
             <input type="hidden" name="id" value={client.id} />
             <ClientFields client={client} />
+            {client.practitioner_id && <input type="hidden" name="practitioner_id" value={client.practitioner_id} />}
             <button className="btn">Save</button>
           </form>
         </details>
@@ -256,6 +259,14 @@ export default async function ClientPage({
                     </select>
                   </div>
                 )}
+                {isManager && hasTeam && (
+                  <div>
+                    <label className="label">With</label>
+                    <select name="practitioner_id" className="input" defaultValue={client.practitioner_id ?? ""}>
+                      {team.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                    </select>
+                  </div>
+                )}
                 <label className="flex items-center gap-2 self-end pb-2 text-sm">
                   <input type="checkbox" name="pro_bono" /> Pro bono
                 </label>
@@ -265,7 +276,7 @@ export default async function ClientPage({
 
             {past.data && past.data.length > 0 && (
               <>
-                <h3 className="mt-5 mb-2 text-xs font-semibold tracking-wide text-muted uppercase">Recent</h3>
+                <h3 className="mt-5 mb-2 font-serif text-lg text-ink">Recent</h3>
                 <ul className="space-y-1 text-sm">
                   {past.data.map((s) => (
                     <li key={s.id} className="flex items-center justify-between">
@@ -321,6 +332,22 @@ export default async function ClientPage({
         </div>
 
         <div className="space-y-5">
+          {isManager && hasTeam && (
+            <section className="card">
+              <h2 className="section-title">Practitioner</h2>
+              <form action={assignClientAction} className="space-y-2">
+                <input type="hidden" name="client_id" value={id} />
+                <select name="practitioner_id" className="input" defaultValue={client.practitioner_id ?? ""}>
+                  {team.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                </select>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" name="move_sessions" defaultChecked /> Move their upcoming sessions too
+                </label>
+                <button className="btn-ghost btn-sm">Reassign</button>
+              </form>
+            </section>
+          )}
+
           {/* Goals */}
           <section className="card">
             <h2 className="section-title">Goals</h2>
@@ -358,6 +385,7 @@ export default async function ClientPage({
           </section>
 
           {/* Invoices */}
+          {isManager && (
           <section className="card">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="section-title mb-0">Invoices</h2>
@@ -376,6 +404,7 @@ export default async function ClientPage({
               <Empty>No invoices yet.</Empty>
             )}
           </section>
+          )}
 
           {/* Timeline */}
           <section className="card">

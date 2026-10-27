@@ -38,6 +38,7 @@ export async function createClientAction(fd: FormData) {
       status: s(fd, "status") || "lead",
       source: s(fd, "source") || null,
       background: s(fd, "background") || null,
+      ...(s(fd, "practitioner_id") ? { practitioner_id: s(fd, "practitioner_id") } : {}),
     })
     .select("id")
     .single();
@@ -59,6 +60,7 @@ export async function updateClientAction(fd: FormData) {
       status: s(fd, "status"),
       source: s(fd, "source") || null,
       background: s(fd, "background") || null,
+      ...(s(fd, "practitioner_id") ? { practitioner_id: s(fd, "practitioner_id") } : {}),
     })
     .eq("id", id);
   if (error) fail(`/clients/${id}`, error.message);
@@ -159,17 +161,20 @@ export async function bookSessionAction(fd: FormData) {
   const minutes = n(fd, "minutes") ?? 60;
   const end = new Date(new Date(start).getTime() + minutes * 60_000).toISOString();
 
-  const { data: clash } = await supabase
-    .from("sessions")
-    .select("id")
-    .eq("status", "scheduled")
-    .lt("starts_at", end)
-    .gt("ends_at", start)
-    .limit(1);
+  let practitionerId = s(fd, "practitioner_id") || null;
+  if (!practitionerId) {
+    const { data: cl } = await supabase.from("clients").select("practitioner_id").eq("id", clientId).single();
+    practitionerId = cl?.practitioner_id ?? null;
+  }
+
+  let clashQuery = supabase.from("sessions").select("id").eq("status", "scheduled").lt("starts_at", end).gt("ends_at", start).limit(1);
+  if (practitionerId) clashQuery = clashQuery.eq("practitioner_id", practitionerId);
+  const { data: clash } = await clashQuery;
   if (clash?.length && !bool(fd, "allow_overlap")) fail(back, "That time overlaps another session.");
 
   const { error } = await supabase.from("sessions").insert({
     client_id: clientId,
+    practitioner_id: practitionerId,
     arrangement_id: s(fd, "arrangement_id") || null,
     offer_id: s(fd, "offer_id") || null,
     starts_at: start,
@@ -211,6 +216,7 @@ export async function rescheduleSessionAction(fd: FormData) {
       meeting_url: s(fd, "meeting_url") || null,
       is_paid_coaching: !bool(fd, "pro_bono"),
       counts_toward_icf: bool(fd, "counts_toward_icf"),
+      ...(s(fd, "practitioner_id") ? { practitioner_id: s(fd, "practitioner_id") } : {}),
     })
     .eq("id", id);
   if (error) fail(`/sessions/${id}`, error.message);
@@ -433,7 +439,8 @@ export async function updateSettingsAction(fd: FormData) {
 }
 
 export async function updateAvailabilityAction(fd: FormData) {
-  const { supabase, coach } = await getCoach();
+  const { supabase, me, isManager } = await getCoach();
+  const memberId = isManager && s(fd, "member_id") ? s(fd, "member_id") : me.id;
   const rows: { weekday: number; start_time: string; end_time: string }[] = [];
   for (let d = 0; d < 7; d++) {
     if (!bool(fd, `on_${d}`)) continue;
@@ -443,8 +450,8 @@ export async function updateAvailabilityAction(fd: FormData) {
       if (start && end && end > start) rows.push({ weekday: d, start_time: start, end_time: end });
     }
   }
-  await supabase.from("availability_rules").delete().eq("coach_id", coach.id);
-  if (rows.length) await supabase.from("availability_rules").insert(rows);
+  await supabase.from("availability_rules").delete().eq("member_id", memberId);
+  if (rows.length) await supabase.from("availability_rules").insert(rows.map((r) => ({ ...r, member_id: memberId })));
   revalidatePath("/settings");
   redirect("/settings?saved=1#availability");
 }
@@ -452,7 +459,7 @@ export async function updateAvailabilityAction(fd: FormData) {
 // ---------- Calendar ----------
 
 export async function saveCalendarAction(fd: FormData) {
-  const { supabase, coach } = await getCoach();
+  const { supabase, me } = await getCoach();
   const id = s(fd, "id");
   const values = {
     name: s(fd, "name") || "Calendar",
@@ -462,9 +469,9 @@ export async function saveCalendarAction(fd: FormData) {
     is_booking_destination: bool(fd, "is_booking_destination"),
   };
   if (values.is_booking_destination)
-    await supabase.from("calendars").update({ is_booking_destination: false }).eq("coach_id", coach.id);
+    await supabase.from("calendars").update({ is_booking_destination: false }).eq("member_id", me.id);
   if (id) await supabase.from("calendars").update(values).eq("id", id);
-  else await supabase.from("calendars").insert(values);
+  else await supabase.from("calendars").insert({ ...values, member_id: me.id });
   revalidatePath("/calendar");
   redirect(s(fd, "back") || "/settings#calendars");
 }
@@ -505,12 +512,10 @@ export async function addCalendarEventAction(fd: FormData) {
   if (error) fail(back, error.message);
 
   if (bool(fd, "cancel_overlapping")) {
-    await supabase
-      .from("sessions")
-      .update({ status: "cancelled" })
-      .eq("status", "scheduled")
-      .lt("starts_at", end)
-      .gt("ends_at", start);
+    const { data: cal } = await supabase.from("calendars").select("member_id").eq("id", s(fd, "calendar_id")).single();
+    let q = supabase.from("sessions").update({ status: "cancelled" }).eq("status", "scheduled").lt("starts_at", end).gt("ends_at", start);
+    if (cal?.member_id) q = q.eq("practitioner_id", cal.member_id);
+    await q;
   }
   revalidatePath("/calendar");
   redirect(back);
@@ -522,4 +527,86 @@ export async function deleteCalendarEventAction(fd: FormData) {
   const back = s(fd, "back") || "/calendar";
   revalidatePath("/calendar");
   redirect(back);
+}
+
+// ---------- Team ----------
+
+function payFields(fd: FormData) {
+  const payType = s(fd, "pay_type") || "none";
+  return { pay_type: payType, pay_rate: payType === "none" ? 0 : Number(s(fd, "pay_rate") || 0) };
+}
+
+export async function addTeamMemberAction(fd: FormData) {
+  const { supabase, isManager } = await getCoach();
+  if (!isManager) fail("/team", "Only owners and managers can add team members.");
+  const email = s(fd, "email").toLowerCase();
+  if (!s(fd, "name") || !email) fail("/team", "Add a name and email.");
+  const { error } = await supabase.from("team_members").insert({
+    name: s(fd, "name"),
+    email,
+    role: s(fd, "role") || "practitioner",
+    employment: s(fd, "employment") || "in_house",
+    colour: s(fd, "colour") || "#5B6E8C",
+    ...payFields(fd),
+  });
+  if (error) fail("/team", error.message.includes("duplicate") ? "Someone with that email is already on the team." : error.message);
+  revalidatePath("/team");
+  redirect("/team?added=1");
+}
+
+export async function updateTeamMemberAction(fd: FormData) {
+  const { supabase, isManager, me } = await getCoach();
+  if (!isManager) fail("/team", "Only owners and managers can change team members.");
+  const id = s(fd, "id");
+  const isSelf = id === me.id;
+  const { error } = await supabase
+    .from("team_members")
+    .update({
+      name: s(fd, "name"),
+      ...(isSelf ? {} : { role: s(fd, "role") || "practitioner", employment: s(fd, "employment") || "in_house" }),
+      colour: s(fd, "colour") || "#5B6E8C",
+      bookable: bool(fd, "bookable"),
+      ...payFields(fd),
+    })
+    .eq("id", id);
+  if (error) fail("/team", error.message);
+  revalidatePath("/team");
+  redirect("/team?saved=1");
+}
+
+export async function deactivateTeamMemberAction(fd: FormData) {
+  const { supabase, isManager, me } = await getCoach();
+  const id = s(fd, "id");
+  if (!isManager || id === me.id) fail("/team", "You can't remove yourself.");
+  const reassignTo = s(fd, "reassign_to") || me.id;
+  // Hand their clients and future sessions to someone else so nothing is dropped.
+  await supabase.from("clients").update({ practitioner_id: reassignTo }).eq("practitioner_id", id);
+  await supabase.from("arrangements").update({ practitioner_id: reassignTo }).eq("practitioner_id", id);
+  await supabase
+    .from("sessions")
+    .update({ practitioner_id: reassignTo })
+    .eq("practitioner_id", id)
+    .eq("status", "scheduled")
+    .gte("starts_at", new Date().toISOString());
+  await supabase.from("team_members").update({ active: false, bookable: false }).eq("id", id);
+  revalidatePath("/team");
+  redirect("/team?saved=1");
+}
+
+export async function assignClientAction(fd: FormData) {
+  const { supabase, isManager } = await getCoach();
+  const clientId = s(fd, "client_id");
+  if (!isManager) fail(`/clients/${clientId}`, "Only owners and managers can reassign clients.");
+  const to = s(fd, "practitioner_id");
+  await supabase.from("clients").update({ practitioner_id: to }).eq("id", clientId);
+  await supabase.from("arrangements").update({ practitioner_id: to }).eq("client_id", clientId).neq("status", "ended");
+  if (bool(fd, "move_sessions"))
+    await supabase
+      .from("sessions")
+      .update({ practitioner_id: to })
+      .eq("client_id", clientId)
+      .eq("status", "scheduled")
+      .gte("starts_at", new Date().toISOString());
+  revalidatePath(`/clients/${clientId}`);
+  redirect(`/clients/${clientId}`);
 }

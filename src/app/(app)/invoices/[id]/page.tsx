@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { Pill } from "@/components/ui";
 import { getCoach } from "@/lib/coach";
 import { fmtDate, fullName, money, todayIn } from "@/lib/format";
@@ -8,7 +8,8 @@ import { PrintButton } from "@/components/print-button";
 
 export default async function InvoicePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { supabase, coach } = await getCoach();
+  const { supabase, coach, isManager } = await getCoach();
+  if (!isManager) redirect("/");
   const [{ data: inv }, { data: items }] = await Promise.all([
     supabase.from("invoices").select("*, client:clients(id, first_name, last_name, email)").eq("id", id).single(),
     supabase.from("invoice_items").select("*").eq("invoice_id", id).order("position"),
@@ -81,7 +82,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
         </div>
 
         <table className="w-full text-sm">
-          <thead className="text-left text-xs tracking-wide text-muted uppercase">
+          <thead className="text-left text-sm text-muted">
             <tr className="border-b border-line">
               <th className="py-2 font-medium">Description</th>
               <th className="py-2 text-right font-medium">Qty</th>

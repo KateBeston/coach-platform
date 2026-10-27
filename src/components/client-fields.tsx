@@ -1,4 +1,10 @@
-export function ClientFields({ client }: { client?: Record<string, string | null> }) {
+export function ClientFields({
+  client,
+  team,
+}: {
+  client?: Record<string, string | null>;
+  team?: { id: string; name: string }[];
+}) {
   return (
     <>
       <div className="grid gap-4 sm:grid-cols-2">
@@ -32,6 +38,15 @@ export function ClientFields({ client }: { client?: Record<string, string | null
           <input className="input" name="source" defaultValue={client?.source ?? ""} placeholder="Referral, Instagram, website…" />
         </div>
       </div>
+      {team && team.length > 1 && (
+        <div>
+          <label className="label">Practitioner</label>
+          <select className="input" name="practitioner_id" defaultValue={client?.practitioner_id ?? ""}>
+            <option value="">Me</option>
+            {team.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+          </select>
+        </div>
+      )}
       <div>
         <label className="label">Background</label>
         <textarea className="input min-h-24" name="background" defaultValue={client?.background ?? ""} placeholder="What they want to work on, context worth remembering" />

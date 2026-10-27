@@ -14,7 +14,8 @@ Built with Next.js 16, React 19, Tailwind 4 and Supabase. Deploys to Vercel.
 - **Sessions** – prep brief from the last notes and open action items, outcome buttons (completed, no-show, late cancel), notes, and one-click invoicing.
 - **Invoices** – numbered automatically, GST added if you're registered, mark sent or paid, print or save as PDF. Financial-year totals.
 - **Offers** – what you sell, and which offers appear on the booking page.
-- **Coaching hours** – ICF-ready log built from completed sessions, with CSV download.
+- **Coaching hours** – ICF-ready log built from each person's completed sessions, with CSV download.
+- **Teams** – for practices with in-house or subcontracted practitioners. Owners and managers see the whole business; practitioners see only their own clients, sessions and notes, and never invoices. Each person has their own calendar, working hours and coaching hours log. Clients can choose a practitioner (or "anyone available") on the booking page. The Team page shows sessions, hours and session value per person, and calculates what subcontractors are owed (percentage, per session or hourly). Solo operators don't see any of this until they add someone.
 
 ## Setup
 
@@ -22,6 +23,8 @@ Built with Next.js 16, React 19, Tailwind 4 and Supabase. Deploys to Vercel.
 2. In Supabase → Authentication → URL Configuration, set the **Site URL** to the same address and add `https://YOUR-DOMAIN/auth/callback` to **Redirect URLs**.
 3. `npm install` then `npm run dev`.
 4. On Vercel, add the three environment variables from `.env.example`.
+
+Team members join by signing up with the email the owner added them under.
 
 The database is already set up in the Supabase project `coach-platform` (Sydney region). The SQL in `supabase/migrations` recreates it from scratch if ever needed.
 

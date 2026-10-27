@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { Banner, Empty, PageHeader, Pill } from "@/components/ui";
 import { getCoach } from "@/lib/coach";
 import { money } from "@/lib/format";
@@ -7,7 +8,8 @@ const KIND: Record<string, string> = { single: "Single session", package: "Packa
 
 export default async function OffersPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const { error } = await searchParams;
-  const { supabase, coach } = await getCoach();
+  const { supabase, coach, isManager } = await getCoach();
+  if (!isManager) redirect("/");
   const { data: offers } = await supabase.from("offers").select("*").order("active", { ascending: false }).order("price_cents");
 
   return (

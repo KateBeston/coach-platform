@@ -22,7 +22,7 @@ export default async function SessionPage({
 }) {
   const { id } = await params;
   const { error } = await searchParams;
-  const { supabase, coach } = await getCoach();
+  const { supabase, coach, team, isManager, hasTeam } = await getCoach();
   const tz = coach.timezone;
   const back = `/sessions/${id}`;
 
@@ -63,6 +63,7 @@ export default async function SessionPage({
             <Pill status={s.status} /> {fmtTime(s.starts_at, tz)} – {fmtTime(s.ends_at, tz)} · {offer?.name ?? "Session"} ·{" "}
             {s.location_type.replace("_", " ")}
             {!s.is_paid_coaching && " · pro bono"}
+            {hasTeam && s.practitioner_id && ` · with ${team.find((m) => m.id === s.practitioner_id)?.name ?? ""}`}
           </p>
         </div>
         {s.meeting_url && s.status === "scheduled" && (
@@ -141,6 +142,7 @@ export default async function SessionPage({
             <p className="mt-2 text-xs text-muted">No-shows and late cancellations count towards a package.</p>
           </section>
 
+          {isManager && (
           <section className="card">
             <h2 className="section-title">Billing</h2>
             {invoice ? (
@@ -155,6 +157,7 @@ export default async function SessionPage({
               </form>
             )}
           </section>
+          )}
 
           <section className="card">
             <h2 className="section-title">Details</h2>
@@ -183,6 +186,14 @@ export default async function SessionPage({
                 <input name="meeting_url" className="input" defaultValue={s.meeting_url ?? ""} placeholder="https://zoom.us/j/…" />
                 <input name="location_detail" className="input mt-2" defaultValue={s.location_detail ?? ""} placeholder="Address or room (in person)" />
               </div>
+              {isManager && hasTeam && (
+                <div>
+                  <label className="label">With</label>
+                  <select name="practitioner_id" className="input" defaultValue={s.practitioner_id ?? ""}>
+                    {team.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </select>
+                </div>
+              )}
               <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="pro_bono" defaultChecked={!s.is_paid_coaching} /> Pro bono</label>
               <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="counts_toward_icf" defaultChecked={s.counts_toward_icf} /> Counts towards coaching hours log</label>
               <button className="btn-ghost w-full">Save changes</button>

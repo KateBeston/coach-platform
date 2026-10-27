@@ -7,10 +7,23 @@ export type PublicOffer = { id: string; name: string; description: string | null
 
 const viewerTz = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-export function BookingFlow({ slug, timezone, currency, offers }: { slug: string; timezone: string; currency: string; offers: PublicOffer[] }) {
+export function BookingFlow({
+  slug,
+  timezone,
+  currency,
+  offers,
+  team,
+}: {
+  slug: string;
+  timezone: string;
+  currency: string;
+  offers: PublicOffer[];
+  team: { id: string; name: string }[];
+}) {
   const [offerId, setOfferId] = useState(offers.length === 1 ? offers[0].id : "");
+  const [memberId, setMemberId] = useState("");
   const [from, setFrom] = useState(() => new Intl.DateTimeFormat("en-CA", { timeZone: timezone }).format(new Date()));
-  const [slots, setSlots] = useState<string[]>([]);
+  const [slots, setSlots] = useState<{ slot_start: string; member_id: string }[]>([]);
   const [chosen, setChosen] = useState("");
   const [loading, startLoading] = useTransition();
   const [result, action, pending] = useActionState(book, null);
@@ -23,12 +36,12 @@ export function BookingFlow({ slug, timezone, currency, offers }: { slug: string
 
   useEffect(() => {
     if (!offerId) return;
-    startLoading(async () => setSlots(await getSlots(slug, offerId, from)));
-  }, [offerId, from, slug]);
+    startLoading(async () => setSlots(await getSlots(slug, offerId, from, memberId || null)));
+  }, [offerId, from, slug, memberId]);
 
   const byDay = useMemo(() => {
     const map = new Map<string, string[]>();
-    for (const s of slots) {
+    for (const { slot_start: s } of slots) {
       const day = new Intl.DateTimeFormat("en-AU", { timeZone: tz, weekday: "long", day: "numeric", month: "long" }).format(new Date(s));
       map.set(day, [...(map.get(day) ?? []), s]);
     }
@@ -52,7 +65,8 @@ export function BookingFlow({ slug, timezone, currency, offers }: { slug: string
       <div className="card">
         <h2 className="mb-2 text-2xl">You&apos;re booked</h2>
         <p className="text-sm">
-          {offer?.name} on{" "}
+          {offer?.name}
+          {team.length > 1 && result.with ? ` with ${result.with}` : ""} on{" "}
           {new Intl.DateTimeFormat("en-AU", { timeZone: tz, weekday: "long", day: "numeric", month: "long", hour: "numeric", minute: "2-digit" }).format(new Date(result.startsAt))}.
         </p>
         {result.meetingUrl && (
@@ -85,6 +99,27 @@ export function BookingFlow({ slug, timezone, currency, offers }: { slug: string
           ))}
         </div>
       </section>
+
+      {offerId && team.length > 1 && (
+        <section className="card">
+          <h2 className="section-title">Who would you like to see?</h2>
+          <div className="flex flex-wrap gap-1.5">
+            {[{ id: "", name: "Anyone available" }, ...team].map((m) => (
+              <button
+                type="button"
+                key={m.id || "any"}
+                onClick={() => {
+                  setChosen("");
+                  setMemberId(m.id);
+                }}
+                className={`rounded-lg px-3 py-1.5 text-sm ring-1 ${m.id === memberId ? "bg-accent text-white ring-accent" : "bg-surface ring-line hover:ring-accent"}`}
+              >
+                {m.name}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       {offerId && (
         <section className="card">
@@ -130,13 +165,14 @@ export function BookingFlow({ slug, timezone, currency, offers }: { slug: string
           <input type="hidden" name="slug" value={slug} />
           <input type="hidden" name="offer_id" value={offerId} />
           <input type="hidden" name="starts_at" value={chosen} />
+          <input type="hidden" name="member_id" value={memberId || slots.find((x) => x.slot_start === chosen)?.member_id || ""} />
           <div className="grid gap-3 sm:grid-cols-2">
             <input name="first_name" className="input" placeholder="First name" required />
             <input name="last_name" className="input" placeholder="Last name" />
             <input name="email" type="email" className="input" placeholder="Email" required />
             <input name="phone" className="input" placeholder="Phone (optional)" />
           </div>
-          {result?.error && <p className="rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn">{result.error}</p>}
+          {result?.error && <p className="rounded-xl bg-warn-soft px-3 py-2 text-sm text-warn">{result.error}</p>}
           <button className="btn w-full" disabled={pending}>{pending ? "Booking…" : `Book ${time(chosen)}`}</button>
         </form>
       )}

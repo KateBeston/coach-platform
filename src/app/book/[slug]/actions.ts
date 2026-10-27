@@ -2,15 +2,21 @@
 
 import { createClient } from "@/lib/supabase/server";
 
-export async function getSlots(slug: string, offerId: string, from: string, days = 14) {
+export async function getSlots(slug: string, offerId: string, from: string, memberId: string | null, days = 14) {
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("public_booking_slots", { p_slug: slug, p_offer: offerId, p_from: from, p_days: days });
+  const { data, error } = await supabase.rpc("public_booking_slots", {
+    p_slug: slug,
+    p_offer: offerId,
+    p_from: from,
+    p_days: days,
+    ...(memberId ? { p_member: memberId } : {}),
+  });
   if (error) return [];
-  return (data ?? []).map((r: { slot_start: string }) => r.slot_start);
+  return (data ?? []) as { slot_start: string; member_id: string }[];
 }
 
 export async function book(
-  _prev: { ok: boolean; error?: string; startsAt?: string; meetingUrl?: string | null } | null,
+  _prev: { ok: boolean; error?: string; startsAt?: string; meetingUrl?: string | null; with?: string } | null,
   fd: FormData,
 ) {
   const supabase = await createClient();
@@ -22,8 +28,9 @@ export async function book(
     p_last_name: String(fd.get("last_name") ?? ""),
     p_email: String(fd.get("email") ?? ""),
     p_phone: String(fd.get("phone") ?? "") || undefined,
+    ...(fd.get("member_id") ? { p_member: String(fd.get("member_id")) } : {}),
   });
   if (error) return { ok: false, error: error.message };
-  const r = data as { starts_at: string; meeting_url: string | null };
-  return { ok: true, startsAt: r.starts_at, meetingUrl: r.meeting_url };
+  const r = data as { starts_at: string; meeting_url: string | null; with: string | null };
+  return { ok: true, startsAt: r.starts_at, meetingUrl: r.meeting_url, with: r.with ?? undefined };
 }
