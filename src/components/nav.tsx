@@ -11,6 +11,7 @@ const LINKS: NavLink[] = [
   { href: "/clients", label: "Clients" },
   { href: "/invoices", label: "Invoices", managers: true },
   { href: "/money", label: "Money", managers: true },
+  { href: "/messages", label: "Messages", managers: true },
   { href: "/offers", label: "Offers", managers: true },
   { href: "/team", label: "Team", managers: true, teamOnly: true },
   { href: "/hours", label: "Coaching hours" },

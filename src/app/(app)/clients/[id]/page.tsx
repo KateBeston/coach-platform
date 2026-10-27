@@ -70,7 +70,7 @@ export default async function ClientPage({
           <summary className="btn-ghost cursor-pointer list-none">Edit details</summary>
           <form action={updateClientAction} className="card absolute right-4 z-10 mt-2 w-[min(36rem,calc(100vw-2rem))] space-y-4 shadow-lg md:right-8">
             <input type="hidden" name="id" value={client.id} />
-            <ClientFields client={client} />
+            <ClientFields client={client} emailReminders={client.email_reminders !== false} />
             {client.practitioner_id && <input type="hidden" name="practitioner_id" value={client.practitioner_id} />}
             <button className="btn">Save</button>
           </form>

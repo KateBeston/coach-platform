@@ -38,6 +38,7 @@ export async function createClientAction(fd: FormData) {
       status: s(fd, "status") || "lead",
       source: s(fd, "source") || null,
       background: s(fd, "background") || null,
+      email_reminders: bool(fd, "email_reminders"),
       ...(s(fd, "practitioner_id") ? { practitioner_id: s(fd, "practitioner_id") } : {}),
     })
     .select("id")
@@ -60,6 +61,7 @@ export async function updateClientAction(fd: FormData) {
       status: s(fd, "status"),
       source: s(fd, "source") || null,
       background: s(fd, "background") || null,
+      email_reminders: bool(fd, "email_reminders"),
       ...(s(fd, "practitioner_id") ? { practitioner_id: s(fd, "practitioner_id") } : {}),
     })
     .eq("id", id);
@@ -431,6 +433,12 @@ export async function updateSettingsAction(fd: FormData) {
       tax_set_aside_pct: n(fd, "tax_set_aside_pct") ?? 30,
       invoice_prefix: s(fd, "invoice_prefix") || "INV-",
       payment_terms_days: n(fd, "payment_terms_days") ?? 7,
+      email_confirmations: bool(fd, "email_confirmations"),
+      email_reminders: bool(fd, "email_reminders"),
+      reminder_hours: Math.min(168, Math.max(1, n(fd, "reminder_hours") ?? 24)),
+      email_nudges: bool(fd, "email_nudges"),
+      email_reply_to: s(fd, "email_reply_to") || null,
+      email_signoff: s(fd, "email_signoff") || null,
     })
     .eq("id", coach.id);
   if (error) fail("/settings", error.message.includes("duplicate") ? "That booking link is taken. Try another." : error.message);
@@ -669,4 +677,15 @@ export async function endSupportAction() {
   revalidatePath("/", "layout");
   const portal = process.env.NEXT_PUBLIC_PORTAL_URL;
   redirect(portal ? `${portal}/coaches` : "/");
+}
+
+// ---------- Emails ----------
+
+export async function sendTestEmailAction() {
+  const { supabase, isManager } = await getCoach();
+  if (!isManager) redirect("/");
+  const { error } = await supabase.rpc("queue_test_email");
+  if (error) fail("/messages", error.message);
+  revalidatePath("/messages");
+  redirect("/messages?test=1");
 }

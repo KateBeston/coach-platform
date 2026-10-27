@@ -1,8 +1,10 @@
 export function ClientFields({
   client,
   team,
+  emailReminders = true,
 }: {
   client?: Record<string, string | null>;
+  emailReminders?: boolean;
   team?: { id: string; name: string }[];
 }) {
   return (
@@ -47,6 +49,9 @@ export function ClientFields({
           </select>
         </div>
       )}
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" name="email_reminders" defaultChecked={emailReminders} /> Send this client booking emails and reminders
+      </label>
       <div>
         <label className="label">Background</label>
         <textarea className="input min-h-24" name="background" defaultValue={client?.background ?? ""} placeholder="What they want to work on, context worth remembering" />

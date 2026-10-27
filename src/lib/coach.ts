@@ -22,6 +22,12 @@ export type Coach = {
   tax_set_aside_pct: number;
   invoice_prefix: string;
   payment_terms_days: number;
+  email_confirmations: boolean;
+  email_reminders: boolean;
+  reminder_hours: number;
+  email_nudges: boolean;
+  email_reply_to: string | null;
+  email_signoff: string | null;
 };
 
 /** A person working in the business, the owner included. */

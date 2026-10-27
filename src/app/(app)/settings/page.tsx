@@ -128,6 +128,34 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           </div>
         </section>
 
+        <section id="emails" className="card grid gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <h2 className="section-title mb-1">Reminders and emails</h2>
+            <p className="text-sm text-muted">Sent automatically. Clients reply straight to you. <a href="/messages" className="text-accent underline">See what&apos;s been sent</a></p>
+          </div>
+          <label className="flex items-center gap-2 text-sm sm:col-span-2">
+            <input type="checkbox" name="email_confirmations" defaultChecked={coach.email_confirmations} /> Email clients when a session is booked, moved or cancelled
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" name="email_reminders" defaultChecked={coach.email_reminders} /> Send clients a reminder before each session
+          </label>
+          <div>
+            <label className="label">How long before (hours)</label>
+            <input name="reminder_hours" type="number" className="input" defaultValue={coach.reminder_hours} min={1} max={168} />
+          </div>
+          <label className="flex items-center gap-2 text-sm sm:col-span-2">
+            <input type="checkbox" name="email_nudges" defaultChecked={coach.email_nudges} /> Email me each morning about ongoing clients with nothing booked
+          </label>
+          <div>
+            <label className="label">Replies go to</label>
+            <input name="email_reply_to" type="email" className="input" defaultValue={coach.email_reply_to ?? ""} placeholder={coach.email ?? "your email"} />
+          </div>
+          <div>
+            <label className="label">Sign off as</label>
+            <input name="email_signoff" className="input" defaultValue={coach.email_signoff ?? ""} placeholder={coach.business_name || coach.display_name || "Your name"} />
+          </div>
+        </section>
+
         <button className="btn">Save settings</button>
       </form>
       ) : (
