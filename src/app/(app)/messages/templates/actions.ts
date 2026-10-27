@@ -32,8 +32,11 @@ export async function resetEmailTemplate(kind: EmailKind): Promise<Result> {
 }
 
 /** Drafts an email with AI from the coach's own description. They always review and save it themselves. */
+/** Approximate US$ per million tokens [input, output], for the usage record. */
+const PRICES: Record<string, [number, number]> = { "claude-sonnet-5-5": [2, 10], "claude-haiku-5-5": [0.1, 0.5] };
+
 export async function draftEmailWithAi(kind: EmailKind, brief: string): Promise<{ ok: true; subject: string; body: string } | { ok: false; error: string }> {
-  const { isManager, coach } = await getCoach();
+  const { isManager, coach, supabase } = await getCoach();
   if (!isManager) return { ok: false, error: "Only owners and managers can change client emails." };
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return { ok: false, error: "AI writing isn't switched on yet. Choose a template or write your own for now." };
@@ -56,19 +59,38 @@ export async function draftEmailWithAi(kind: EmailKind, brief: string): Promise<
     'Reply with JSON only: {"subject": "...", "body": "..."} with \\n for line breaks.',
   ].join("\n");
 
+  const model = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5-5";
+  // Every AI request is recorded, so the platform can see use and cost per coach.
+  const record = async (ok: boolean, usage?: { input_tokens?: number; output_tokens?: number }, error?: string) => {
+    const [pi, po] = PRICES[model] ?? [0, 0];
+    const input = usage?.input_tokens ?? 0;
+    const output = usage?.output_tokens ?? 0;
+    await supabase.from("ai_usage").insert({
+      coach_id: coach.id, feature: "email_draft", detail: k.label, model,
+      input_tokens: input, output_tokens: output, cost_usd: (input * pi + output * po) / 1_000_000, ok, error: error ?? null,
+    });
+  };
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-      body: JSON.stringify({ model: process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5-5", max_tokens: 600, messages: [{ role: "user", content: prompt }] }),
+      body: JSON.stringify({ model, max_tokens: 600, messages: [{ role: "user", content: prompt }] }),
     });
-    if (!res.ok) return { ok: false, error: "The AI couldn't write that just now. Try again in a moment." };
-    const data = (await res.json()) as { content?: { type: string; text?: string }[] };
+    if (!res.ok) {
+      await record(false, undefined, `HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+      return { ok: false, error: "The AI couldn't write that just now. Try again in a moment." };
+    }
+    const data = (await res.json()) as { content?: { type: string; text?: string }[]; usage?: { input_tokens?: number; output_tokens?: number } };
     const text = data.content?.find((c) => c.type === "text")?.text ?? "";
     const json = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)) as { subject?: string; body?: string };
-    if (!json.body) return { ok: false, error: "The AI's draft came back empty. Try describing it a little differently." };
+    if (!json.body) {
+      await record(false, data.usage, "Empty draft");
+      return { ok: false, error: "The AI's draft came back empty. Try describing it a little differently." };
+    }
+    await record(true, data.usage);
     return { ok: true, subject: json.subject ?? "", body: json.body };
-  } catch {
+  } catch (e) {
+    await record(false, undefined, e instanceof Error ? e.message.slice(0, 200) : "Request failed").catch(() => {});
     return { ok: false, error: "The AI couldn't write that just now. Try again in a moment." };
   }
 }
