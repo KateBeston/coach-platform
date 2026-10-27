@@ -1,3 +1,4 @@
+import { PRIVACY_URL, TERMS_URL } from "@/lib/platform";
 import { signIn, signUp } from "./actions";
 
 export default async function LoginPage({
@@ -42,6 +43,25 @@ export default async function LoginPage({
               required
             />
           </div>
+          {isSignUp && (
+            <div className="space-y-2 rounded-xl bg-accent-soft/60 p-3 text-sm">
+              <label className="flex items-start gap-2">
+                <input type="checkbox" name="agree" required className="mt-1" />
+                <span>
+                  I agree to the {TERMS_URL ? <a href={TERMS_URL} target="_blank" className="text-accent underline">Terms of Service</a> : "Terms of Service"} and{" "}
+                  {PRIVACY_URL ? <a href={PRIVACY_URL} target="_blank" className="text-accent underline">Privacy Policy</a> : "Privacy Policy"}.
+                </span>
+              </label>
+              <p className="text-muted">
+                Our support team can open your account to help you or fix problems. Every access is recorded with a reason, and ends automatically.{" "}
+                {PRIVACY_URL ? (
+                  <a href={PRIVACY_URL} target="_blank" className="text-accent underline">Read how we protect your information.</a>
+                ) : (
+                  "Read how we protect your information."
+                )}
+              </p>
+            </div>
+          )}
           <button className="btn w-full">{isSignUp ? "Create account" : "Sign in"}</button>
         </form>
 

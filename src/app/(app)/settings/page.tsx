@@ -1,6 +1,7 @@
 import { Banner, PageHeader } from "@/components/ui";
 import { getCoach } from "@/lib/coach";
-import { WEEKDAYS } from "@/lib/format";
+import { fmtDateTime, WEEKDAYS } from "@/lib/format";
+import { SUPPORT_EMAIL } from "@/lib/platform";
 import { saveCalendarAction, updateAvailabilityAction, updateSettingsAction } from "../actions";
 import { signOut } from "../../login/actions";
 
@@ -17,6 +18,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     supabase.from("availability_rules").select("*").eq("member_id", me.id).order("start_time"),
     supabase.from("calendars").select("*").eq("member_id", me.id).order("created_at"),
   ]);
+  const { data: supportRaw } = isManager ? await supabase.rpc("my_support_history") : { data: null };
+  const supportHistory = (supportRaw ?? []) as { id: string; staff_name: string; reason: string; started_at: string; ended_at: string | null; expires_at: string; active: boolean }[];
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? "";
   const byDay = (d: number) => (rules ?? []).filter((r) => r.weekday === d);
 
@@ -190,6 +193,33 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           ))}
         </div>
       </section>
+
+      {isManager && (
+        <section id="support-access" className="card mt-5">
+          <h2 className="section-title">Support access</h2>
+          <p className="mb-4 text-sm text-muted">
+            Our team opens your account only to help you or to fix problems. Below is every time someone has, and why. Questions? Email{" "}
+            {SUPPORT_EMAIL.includes("@") ? <a href={`mailto:${SUPPORT_EMAIL}`} className="text-accent underline">{SUPPORT_EMAIL}</a> : SUPPORT_EMAIL}.
+          </p>
+          {supportHistory.length ? (
+            <ul className="divide-y divide-line text-sm">
+              {supportHistory.map((h) => (
+                <li key={h.id} className="flex flex-wrap items-start justify-between gap-2 py-2.5">
+                  <div>
+                    <p className="font-medium">{h.reason}</p>
+                    <p className="text-xs text-muted">
+                      {h.staff_name} · {fmtDateTime(h.started_at, coach.timezone)}
+                      {h.ended_at ? ` to ${fmtDateTime(h.ended_at, coach.timezone)}` : h.active ? " · open now" : ""}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted">Nobody from our team has opened your account.</p>
+          )}
+        </section>
+      )}
 
       <form action={signOut} className="mt-5">
         <button className="btn-ghost">Sign out</button>

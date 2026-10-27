@@ -16,11 +16,12 @@ export async function signIn(formData: FormData) {
 export async function signUp(formData: FormData) {
   const supabase = await createClient();
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  if (formData.get("agree") !== "on") redirect(`/login?mode=signup&error=${encodeURIComponent("Please agree to the Terms of Service and Privacy Policy.")}`);
   const { data, error } = await supabase.auth.signUp({
     email: String(formData.get("email")),
     password: String(formData.get("password")),
     options: {
-      data: { display_name: String(formData.get("display_name") ?? "") },
+      data: { display_name: String(formData.get("display_name") ?? ""), agreed_terms_at: new Date().toISOString() },
       emailRedirectTo: `${site}/auth/callback`,
     },
   });
